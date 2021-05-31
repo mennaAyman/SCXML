@@ -1,0 +1,175 @@
+<?xml version="1.0"?>
+<scxml
+	xmlns="http://www.w3.org/2005/07/scxml" version="1.0"
+	xmlns:db="http://actions.injaz.edafa.com/db"
+	xmlns:injaz="http://actions.injaz.edafa.com/injaz"
+	xmlns:http="http://actions.injaz.edafa.com/http"
+	xmlns:kpi="http://actions.injaz.edafa.com/kpi"
+>
+    <datamodel>
+        <!-- check eligibility input -->
+		<data id="username" expr="null" />
+		<data id="password" expr="null" />
+		<data id="userAction" expr="null" />
+		<data id="msisdn" expr="null" />
+		<data id="sessionId" expr="null" />
+		<data id="hashedPassword" expr="null" />
+        <!-- log Parameters -->
+		<data id="stateName" expr="null"/>
+        <!-- queries -->
+		<data id="checkUsername" expr="'SELECT * FROM user.user where username=\'$user\';'" />
+		<data id="insertUser" expr="'INSERT INTO user.user (username, password, msisdn) values (\'$username\',\'$password\',\'$msisdn\');'" />
+        <data id="insertSessionId" expr="'INSERT INTO user.user (session_id) values (\'$sessionId\') where username=\'$user\' ;'" />
+		<data id="checkUsernameAndPassword" expr="'SELECT * FROM user.user where username=\'$user\' AND  password=\'$password\' ;'" />
+        <!-- actions utilites -->
+		<data id="dbActionResponse" expr="null" />
+    </datamodel>
+
+    <state id ="INITIAL">
+        <transition event="HttpRequest.POST">
+            <assign location="stateName" expr="'INTITIAL_STATE'"/>
+            <assign location="userAction" expr="_event.data.get('userAction')" />
+            <assign location="password" expr="_event.data.get('password')" />
+            <assign location="username" expr="_event.data.get('username')" />
+            <assign location="msisdn" expr="_event.data.get('msisdn')" />
+            <injaz:Log logLevel="'info'" message="stateName + ' | event=' + _event.name + ' ,userAction=' +userAction+ ', requestParameters=' + _event.data"/>
+            <if cond = "userAction == 'login'">
+                <raise event = "internal.initial.login"/>
+            <elseif cond = "userAction == 'signUp'"/>
+                <injaz:Log logLevel="'info'" message="'SIGNUP'"/>
+                <raise event = "internal.initial.signUp"/>
+            </if>
+        </transition>
+
+        <transition event="internal.initial.login" target="LOGIN">
+                <injaz:Log logLevel="'info'" message="'login'"/>
+        </transition>
+
+        <transition event="internal.initial.signUp" target="SIGNUP">
+                <injaz:Log logLevel="'info'" message="'signup'"/>
+        </transition>
+    </state>
+
+    <state id="SIGNUP">
+        <onentry>
+            <assign location="stateName" expr="'SIGNUP_STATE'"/>
+            <raise event="internal.initial.signUp11"/>
+        </onentry>
+        <transition event="internal.initial.signUp11">
+            <assign location="stateName" expr="'SIGNUP_STATE'"/>
+            <injaz:Log logLevel="'info'" message="stateName + ' | event=' + _event.name + ' ,userAction=' +userAction+ ',  username=' +username+ ' ,password= ******* ,msisdn='+msisdn"/>
+            <db:Execute query="checkUsername" type="'SELECT'" queryID="'checkUsername'" dataSource="'user'" response="dbActionResponse" />
+            <injaz:Log logLevel="'info'" message="'checkUsername query'"/>
+            <if cond="dbActionResponse.getResponse() =='SUCCESS'">
+                <raise event = "internal.signup.usernameExists"/>
+                <injaz:Log logLevel="'info'" message="'query success'"/>
+            <else/>
+                <injaz:Log logLevel="'info'" message="'query failed'"/>
+                <injaz:Hash prefix="''" data="password" response="hashedPassword"/>
+                <assign location="password" expr="hashedPassword" />
+                <db:Execute query="insertUser" type="'INSERT'" queryID="'insertUser'" dataSource="'user'" response="dbActionResponse" />
+                <raise event = "internal.signup.usernameInsert"/>
+            </if>
+        </transition>
+        <transition event="internal.signup.usernameExists" target="USER_EXSIST" />
+        <transition event="internal.signup.usernameInsert" target="INSERT_USER">
+                <injaz:Log logLevel="'info'" message="'going final'"/>
+        </transition>
+    </state>
+
+    <state id="LOGIN">
+        <onentry>
+            <assign location="stateName" expr="'LOGIN_STATE'"/>
+            <injaz:Log logLevel="'info'" message="stateName + ' | event=' + _event.name + ' ,userAction=' +userAction+ ', username=' + _event.data.get('username')+' ,password= ******* '"/>
+            <raise event="internal.initial.login"/>
+        </onentry>
+        <transition event="internal.initial.login">
+            <assign location="stateName" expr="'LOGIN_STATE'"/>
+            <injaz:Log logLevel="'info'" message="stateName + ' | event=' + _event.name + ' ,userAction=' +userAction+ ', username=' +username+' ,password= ******* '"/>
+            <injaz:Hash prefix="'LSF'" data="password" response="hashedPassword"/>
+            <assign location="password" expr="hashedPassword" />
+            <if cond = "empty(username) or empty(password)">
+                <injaz:Log logLevel="'info'" message="stateName + ' | event=' + _event.name + ', username=' + username + ', password=' + password + ', msg=missing parameter'"/>
+            <else/>
+                <db:Execute query="checkUsernameAndPassword" type="'SELECT'" queryID="'checkUsernameAndPassword'" dataSource="'user'" response="dbActionResponse" />
+                <if cond="dbActionResponse.getResponse() =='SUCCESS'">
+                    <injaz:GenerateID prefix="username" dateFormat="'yyMMddHHmmssSSS'" response="sessionId"/>
+                    <db:Execute query="insertSessionId" type="'INSERT'" queryID="'insertSessionId'" dataSource="'user'" response="dbActionResponse" />
+                    <injaz:Log logLevel="'info'" message="stateName + ' | event=' + _event.name + ', username=' + username + ', password=' + password + ', msg=login successfully'"/>
+                     <http:Respond profileID="'test_response'">
+                    <ResponseParams>
+                        <ResponseParam name="status" value="0" />
+                        <ResponseParam name="desc" value="'SUCCESS'" />
+                    </ResponseParams>
+                </http:Respond>
+                <else/>
+                    <injaz:Log logLevel="'info'" message="stateName + ' | event=' + _event.name + ', username=' + username + ', password=' + password + ', msg=login failed, incorerct username or password'"/>
+                    <http:Respond profileID="'test_response'">
+                    <ResponseParams>
+                        <ResponseParam name="status" value="1" />
+                        <ResponseParam name="desc" value="'FAIL'" />
+                </ResponseParams>
+                </http:Respond>
+                </if>
+            </if>
+        </transition>
+       <!-- <transition event="invalid_Requset_parameter" target="FINAL" />
+        <transition event="login_success" target="FINAL" />
+        <transition event="login_fail" target="FINAL" /> -->
+    </state>
+
+    <state id="USER_EXSIST">
+        <onentry>
+            <assign location="stateName" expr="'USER_EXSIST'"/>
+            <raise event = "internal.signup.usernameExists"/>
+        </onentry>
+        <transition event="internal.signup.usernameExists">
+			<assign location="stateName" expr="'FINAL'"/>
+            <injaz:Log logLevel="'info'" message="stateName + ' | event=' + _event.name + ', username=' + username + ', msg=username already exists.'"/>
+        </transition>
+    </state>
+
+    <state id="INSERT_USER">
+        <onentry>
+            <assign location="stateName" expr="'INSERT_USER'"/>
+            <raise event = "internal.signup.usernameInsert"/>
+        </onentry>
+        <transition event="internal.signup.usernameInsert">
+            <if cond="dbActionResponse.getStatus() =='SUCCESS'">
+                <injaz:Log logLevel="'info'" message="stateName + ' | event=' + _event.name + ', username=' + username + ', password=' + password + ',msisdn=' + msisdn + ',msg=Insertion done successfully'"/>
+                <http:Respond profileID="'test_response'">
+                    <ResponseParams>
+                        <ResponseParam name="status" value="0" />
+                        <ResponseParam name="desc" value="'SUCCESS'" />
+                    </ResponseParams>
+                </http:Respond>
+            <else/>
+				<injaz:Log logLevel="'info'" message="stateName + ' | event=' + _event.name + ', username=' + username + ', password=' + password + ', msisdn=' + msisdn + ',msg=database coonection failed'"/>
+                <http:Respond profileID="'test_response'">
+                    <ResponseParams>
+                        <ResponseParam name="status" value="1" />
+                        <ResponseParam name="desc" value="'FAIL'" />
+                </ResponseParams>
+                </http:Respond>
+			</if>
+        </transition>
+    </state>
+
+    <!--<state id="FINAL">
+        
+        <transition event="login_success">
+			<assign location="stateName" expr="'FINAL'"/>
+            <injaz:Log logLevel="'info'" message="stateName + ' | event=' + _event.name + ', username=' + username + ', password=' + password + ', msg=login successfully'"/>
+        </transition>
+        <transition event="login_fail">
+			<assign location="stateName" expr="'FINAL'"/>
+            <injaz:Log logLevel="'info'" message="stateName + ' | event=' + _event.name + ', username=' + username + ', password=' + password + ', msg=login failed, incorerct username or password'"/>
+        </transition>
+        <transition event="invalid_Requset_parameter">
+			<assign location="stateName" expr="'FINAL'"/>
+            <injaz:Log logLevel="'info'" message="stateName + ' | event=' + _event.name + ', username=' + username + ', password=' + password + ', msg=missing parameter'"/>
+        </transition>
+    </state>-->
+
+</scxml>
+    
