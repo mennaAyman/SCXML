@@ -22,7 +22,7 @@
 		<data id="url" expr="null"/>
         <data id="httpResponse" expr="null"/>
         <!-- timeouts -->
-		<data id="adslGetBillingDataAPIRequestTimeout" expr="null" />
+		<data id="requestTimeout" expr="null" />
 </datamodel>
  <state id ="INITIAL">
         <transition event="HttpRequest.POST">
@@ -102,8 +102,8 @@
 			<injaz:Log logLevel="'info'" message="stateName + ' | event=' + _event.name + ', responseID=' +responseID" />
 			
 			<assign location="url" expr="'http://localhost:9099/pgwServices/testWiremock'" />
-            	<assign location= "adslGetBillingDataAPIRequestTimeout" expr="100" />
-            	<http:Request url="url" httpMethod="'POST'" requestParsingType="'JSON'" responseParsingType="'JSON'" response="httpResponse" readTimeout="adslGetBillingDataAPIRequestTimeout">
+            	<assign location= "requestTimeout" expr="100" />
+            	<http:Request url="url" httpMethod="'POST'" requestParsingType="'JSON'" responseParsingType="'JSON'" response="httpResponse" readTimeout="requestTimeout">
             		<RequestParams>
             			<RequestParam name="msisdn" value="msisdn"/>
 					</RequestParams>
