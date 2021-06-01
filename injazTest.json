@@ -1,0 +1,14 @@
+{
+"request":{
+      "method":"POST",
+      "url":"/pgwServices/testWiremock"
+   },
+"response":{
+      "status":200,
+      "body":"connected to wiremock",
+      "headers":{
+         "Content-Type":"application/json"
+      },
+"fixedDelayMilliseconds": 0
+ }
+}
