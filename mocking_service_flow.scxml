@@ -1,0 +1,126 @@
+<?xml version="1.0"?>
+<scxml
+	xmlns="http://www.w3.org/2005/07/scxml" version="1.0"
+	xmlns:db="http://actions.injaz.edafa.com/db"
+	xmlns:injaz="http://actions.injaz.edafa.com/injaz"
+	xmlns:http="http://actions.injaz.edafa.com/http"
+	xmlns:kpi="http://actions.injaz.edafa.com/kpi"
+>
+
+<datamodel>
+		<!-- Resquest Param -->
+		<data id="msisdn" expr="null" />
+		<data id="sessionId" expr="null" />
+	     <!-- actions utilites -->
+		<data id="dbResponse" expr="null" />
+		<data id="dbResult" expr="null" />
+		<data id="profileID" expr="'userTestWiremock'" />
+		<data id="responseID" expr="null" />
+		<!-- log param -->
+		<data id = "stateName" expr ="null"/>
+		<!-- http parameters -->
+		<data id="url" expr="null"/>
+        <data id="httpResponse" expr="null"/>
+        <!-- timeouts -->
+		<data id="adslGetBillingDataAPIRequestTimeout" expr="null" />
+</datamodel>
+ <state id ="INITIAL">
+        <transition event="HttpRequest.POST">
+            <assign location="stateName" expr="'INTITIAL'"/>
+            <assign location="msisdn" expr="_event.data.get('msisdn')" />
+            <assign location="sessionId" expr="_event.data.get('sessionId')" />
+            <injaz:Log logLevel="'info'" message="stateName + ' | event=' + _event.name + ' ,msisdn=' +msisdn+ ' ,sessionId=' +sessionId+', requestParameters=' + _event.data"/>
+            <if cond = "(empty(_event.data.get('msisdn')) or empty(_event.data.get('sessionId')))">
+            	<assign location="responseID" expr="'Invalid request parameters'"/>
+            	<raise event = "internal.initial.invalid_requset_parameters" />
+            <else/>	
+            	<raise event = "internal.initial.checkDatabase" />
+            </if>
+
+        </transition>
+
+        <transition event="internal.initial.checkDatabase" target="CHECK_DATABASE"/>
+        <transition event = "internal.initial.invalid_requset_parameters" target = "FINAL"/>
+</state>
+
+<state id = "CHECK_DATABASE">
+	<onentry>
+		    <assign location="stateName" expr="'CHECK_DATABASE'"/>
+		    <injaz:Log logLevel="'info'" message="stateName + ' | event=' + _event.name + ' ,msisdn=' +msisdn+ ' ,sessionId=' +sessionId"/>
+
+		    <db:Execute profileID="profileID" response="dbResponse">
+				<QueryParams>
+					<QueryParam name="$msisdn" value="msisdn"/>
+					<QueryParam name="$sessionId" value="sessionId"/>
+				</QueryParams>
+                <Queries>
+                    <Query id="checkUserInDatabase" enable="true"/>
+                </Queries>
+			</db:Execute>
+
+			<if cond="( dbResponse.getStatus() == 'SUCCESS'
+						and !empty(dbResponse.getResponse().getDbResponse().get('checkUserInDatabase'))
+						and !empty(dbResponse.getResponse().getDbResponse().get('checkUserInDatabase').getResponseObject())
+						and dbResponse.getResponse().getDbResponse().get('checkUserInDatabase').getResponseObject().getSelectedRowsCount() == '1'
+						)">
+				<injaz:Log logLevel="'info'" message="stateName + ' | event=' + _event.name + ' ,msisdn=' +msisdn+ ' ,sessionId=' +sessionId+ ' ,msg=success'"/>
+				<assign location="responseID" expr="'SUCCESS'"/>
+				<raise event = "Authentication_Succes"/>
+			<else/>
+				<injaz:Log logLevel="'info'" message="stateName + ' | event=' + _event.name + ' ,msisdn=' +msisdn+ ' ,sessionId=' +sessionId+ ' ,msg=Authentication Failed'"/>
+				<assign location="responseID" expr="'Authentication Failed'"/>
+				<raise event = "Authentication_Failed"/>			
+			</if>
+	</onentry>
+
+			<transition event = "Authentication_Succes" target = "FINAL"/>
+			<transition event = "Authentication_Failed" target = "FINAL"/>
+</state>
+<state id="FINAL">
+        
+        <onentry>
+			<assign location="stateName" expr="'FINAL'"/>
+			<if cond="( dbResponse.getStatus() == 'SUCCESS'
+						and !empty(dbResponse.getResponse().getDbResponse().get('checkUserInDatabase'))
+						and !empty(dbResponse.getResponse().getDbResponse().get('checkUserInDatabase').getResponseObject())
+						and dbResponse.getResponse().getDbResponse().get('checkUserInDatabase').getResponseObject().getSelectedRowsCount() == '1'
+						)">
+				<http:Respond profileID="'test_response'">
+					<ResponseParams>
+						<ResponseParam name="responseID" value="responseID"/>
+						<ResponseParam name="sessionId" value="sessionId"/>
+						<ResponseParam name="msisdn" value="msisdn"/>
+						</ResponseParams>
+				</http:Respond>
+			<else/>
+				<http:Respond profileID="'test_response'">
+					<ResponseParams>
+						<ResponseParam name="responseID" value="responseID"/>
+						</ResponseParams>
+				</http:Respond>
+			</if>
+			<injaz:Log logLevel="'info'" message="stateName + ' | event=' + _event.name + ', responseID=' +responseID" />
+			
+			<assign location="url" expr="'http://localhost:9099/pgwServices/testWiremock'" />
+            	<assign location= "adslGetBillingDataAPIRequestTimeout" expr="100" />
+            	<http:Request url="url" httpMethod="'POST'" requestParsingType="'JSON'" responseParsingType="'JSON'" response="httpResponse" readTimeout="adslGetBillingDataAPIRequestTimeout">
+            		<RequestParams>
+            			<RequestParam name="msisdn" value="msisdn"/>
+					</RequestParams>
+					<Headers>
+						<Header name="Content-type" value="'application/json'"/>
+					</Headers>
+				</http:Request>
+				<if cond="(
+						httpResponse.getStatus() == 'success'
+						and httpResponse.getResponse().getStatusCode() == 200
+						)">
+                	<injaz:Log logLevel="'info'" message="'connection with wiremock success'"/>
+            	<else/>
+					<injaz:Log logLevel="'info'" message="'connection with wiremock failed'"/>
+				</if>
+		</onentry>
+
+    </state>
+   
+</scxml>
